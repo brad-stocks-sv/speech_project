@@ -9,19 +9,108 @@ from torch.autograd import Variable
 # instead of concatenation, you could use conv1d strides in Decoder
 cuda = torch.cuda.is_available()
 
+
+class SequenceShuffle(nn.Module):
+    # Performs pooling for pBLSTM
+    def forward(self, seq):
+        assert isinstance(seq, PackedSequence)
+        padded, lens = pad_packed_sequence(seq)  # (L, BS, D)
+        padded = padded.transpose(0, 1)
+        if padded.size(1) % 2 > 0:
+            padded = padded[:, :-1, :]
+        padded = padded.contiguous()
+        padded = padded.view(padded.size(0), padded.size(1) // 2, 2 * padded.size(2))
+        padded = padded.transpose(0, 1)
+        newlens = np.array(lens) // 2
+        newseq = pack_padded_sequence(padded, newlens)
+        return newseq
+
+
+class AdvancedLSTM(nn.LSTM):
+    # Class for learning initial hidden states when using LSTMs
+    def __init__(self, *args, **kwargs):
+        super(AdvancedLSTM, self).__init__(*args, **kwargs)
+        bi = 2 if self.bidirectional else 1
+        self.h0 = nn.Parameter(torch.FloatTensor(bi, 1, self.hidden_size).zero_())
+        self.c0 = nn.Parameter(torch.FloatTensor(bi, 1, self.hidden_size).zero_())
+
+    def initial_state(self, n):
+        return (
+            self.h0.expand(-1, n, -1).contiguous(),
+            self.c0.expand(-1, n, -1).contiguous()
+        )
+
+    def forward(self, input, hx=None):
+        if hx is None:
+            n = input.batch_sizes[0]
+            hx = self.initial_state(n)
+        return super(AdvancedLSTM, self).forward(input, hx=hx)
+
+
+class pLSTM(AdvancedLSTM):
+    # Pyramidal LSTM
+    def __init__(self, *args, **kwargs):
+        super(pLSTM, self).__init__(*args, **kwargs)
+        self.shuffle = SequenceShuffle()
+
+    def forward(self, input, hx=None):
+        return super(pLSTM, self).forward(self.shuffle(input), hx=hx)
+
+
+class EncoderModel(nn.Module):
+    # Encodes utterances to produce keys and values
+    def __init__(self, args):
+        super(EncoderModel, self).__init__()
+        self.rnns = nn.ModuleList()
+        self.rnns.append(AdvancedLSTM(INPUT_DIM, args.encoder_dim, bidirectional=True))
+        self.rnns.append(pLSTM(args.encoder_dim * 4, args.encoder_dim, bidirectional=True))
+        self.rnns.append(pLSTM(args.encoder_dim * 4, args.encoder_dim, bidirectional=True))
+        self.rnns.append(pLSTM(args.encoder_dim * 4, args.encoder_dim, bidirectional=True))
+        self.key_projection = nn.Linear(args.encoder_dim * 2, args.key_dim)
+        self.value_projection = nn.Linear(args.encoder_dim * 2, args.value_dim)
+
+    def forward(self, utterances, utterance_lengths):
+        h = utterances
+
+        # Sort and pack the inputs
+        sorted_lengths, order = torch.sort(utterance_lengths, 0, descending=True)
+        _, backorder = torch.sort(order, 0)
+        h = h[:, order, :]
+        h = pack_padded_sequence(h, sorted_lengths.data.cpu().numpy())
+
+        # RNNs
+        for rnn in self.rnns:
+            h, _ = rnn(h)
+
+        # Unpack and unsort the sequences
+        h, output_lengths = pad_packed_sequence(h)
+        h = h[:, backorder, :]
+        output_lengths = torch.from_numpy(np.array(output_lengths))
+        if backorder.data.is_cuda:
+            output_lengths = output_lengths.cuda()
+        output_lengths = output_lengths[backorder.data]
+
+        # Apply key and value
+        keys = self.key_projection(h)
+        values = self.value_projection(h)
+
+        return keys, values, output_lengths
+
+
 def sample_gumbel(shape, eps=1e-10, out=None):
-	"""
-	Sample from Gumbel(0, 1)
-	based on
-	https://github.com/ericjang/gumbel-softmax/blob/3c8584924603869e90ca74ac20a6a03d99a91ef9/Categorical%20VAE.ipynb ,
-	(MIT license)
-	"""
-	U = out.resize_(shape).uniform_() if out is not None else torch.rand(shape)
-	return - torch.log(eps - torch.log(U + eps))
+    """
+    Sample from Gumbel(0, 1)
+    based on
+    https://github.com/ericjang/gumbel-softmax/blob/3c8584924603869e90ca74ac20a6a03d99a91ef9/Categorical%20VAE.ipynb ,
+    (MIT license)
+    """
+    U = out.resize_(shape).uniform_() if out is not None else torch.rand(shape)
+    return - torch.log(eps - torch.log(U + eps))
+
 
 def gumbel_argmax(logits, dim):
-	# Draw from a multinomial distribution efficiently
-	return torch.max(logits + sample_gumbel(logits.size(), out=logits.data.new()), dim)[1]
+    # Draw from a multinomial distribution efficiently
+    return torch.max(logits + sample_gumbel(logits.size(), out=logits.data.new()), dim)[1]
 
 
 def createMasks(lens,maxseq):
