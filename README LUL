@@ -1,0 +1,10 @@
+README LUL
+
+to get started....
+mkdir data
+mv all.zip data/.
+cd data/
+unzip all.zip
+cd ..
+python3 preprocessing.py
+python3 main_v8.py
