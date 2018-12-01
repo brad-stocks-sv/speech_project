@@ -5,14 +5,14 @@ import torch.nn as nn
 from torch.autograd import Variable
 import os
 import operator
-from LAS_v8 import *
+from CNN_LAS import *
 # import gc
 cuda = torch.cuda.is_available()
 batch_size = 32
 grad_clip = 0.25
 log_step = 50
 
-LSTM_encoder = True
+LSTM_encoder = False
 
 
 def repackage_hidden(h):
@@ -130,8 +130,10 @@ def getbatch(data,labels,i,batch_size):
 	bsz = min(batch_size,data.shape[0] - i)
 	xd,xl,td,ty,tl = prep_data(data[i:i+bsz],labels[i:i+bsz])
 	xd = Variable(torch.from_numpy(xd)).float().contiguous()
+	xd = xd.transpose(2,1).contiguous()
 	tx = Variable(torch.from_numpy(td)).long().contiguous()
 	ty = Variable(torch.from_numpy(ty)).long().contiguous()
+	print(xd.shape)
 	# masks = torch.from_numpy(masks)
 	if cuda:
 		xd = xd.cuda()
