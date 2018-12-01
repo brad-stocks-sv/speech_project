@@ -5,6 +5,21 @@ from torch.autograd import Variable
 cuda = torch.cuda.is_available()
 
 
+def calc_output_len(inlens,kernel_size=3,stride=1,padding=1,dilation=1):
+	return ((np.array(inlens) + 2 * padding - dilation * (kernel_size - 1) - 1)/stride + 1).astype(int)
+
+def full_run_lens(lens):
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=2,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=2,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=2,padding=1)
+	return lens
+
 def sample_gumbel(shape, eps=1e-10, out=None):
 	"""
 	Sample from Gumbel(0, 1)
@@ -80,7 +95,8 @@ class ConvEncoder(nn.Module):
 	def forward(self,input,lens):
 		var = self.convnet(input)
 		var = var.transpose(2,1)
-		lens = np.array(lens)//8 + 1
+		lens = full_run_lens(lens)
+		# lens = np.array(lens)//8 + 1
 		keys = self.key_proj(var)
 		values = self.val_proj(var)
 
