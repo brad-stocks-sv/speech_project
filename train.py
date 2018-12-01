@@ -12,6 +12,8 @@ batch_size = 32
 grad_clip = 0.25
 log_step = 50
 
+LSTM_encoder = True
+
 
 def repackage_hidden(h):
     if isinstance(h, Variable):
@@ -139,8 +141,10 @@ def getbatch(data,labels,i,batch_size):
 
 
 
-
-modelEncoder = Encoder()
+if LSTM_encoder:
+	modelEncoder = EncoderModel()
+else:
+	modelEncoder = ConvEncoder()
 modelDecoder = Decoder()
 print(modelEncoder)
 print(modelDecoder)

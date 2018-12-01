@@ -59,15 +59,15 @@ class pLSTM(AdvancedLSTM):
 
 class EncoderModel(nn.Module):
     # Encodes utterances to produce keys and values
-    def __init__(self, args):
+    def __init__(self, encoder_dim=256, key_dim=128, value_dim=128):
         super(EncoderModel, self).__init__()
         self.rnns = nn.ModuleList()
-        self.rnns.append(AdvancedLSTM(INPUT_DIM, args.encoder_dim, bidirectional=True))
-        self.rnns.append(pLSTM(args.encoder_dim * 4, args.encoder_dim, bidirectional=True))
-        self.rnns.append(pLSTM(args.encoder_dim * 4, args.encoder_dim, bidirectional=True))
-        self.rnns.append(pLSTM(args.encoder_dim * 4, args.encoder_dim, bidirectional=True))
-        self.key_projection = nn.Linear(args.encoder_dim * 2, args.key_dim)
-        self.value_projection = nn.Linear(args.encoder_dim * 2, args.value_dim)
+        self.rnns.append(AdvancedLSTM(INPUT_DIM, encoder_dim, bidirectional=True))
+        self.rnns.append(pLSTM(args.encoder_dim * 4, encoder_dim, bidirectional=True))
+        self.rnns.append(pLSTM(args.encoder_dim * 4, encoder_dim, bidirectional=True))
+        self.rnns.append(pLSTM(args.encoder_dim * 4, encoder_dim, bidirectional=True))
+        self.key_projection = nn.Linear(encoder_dim * 2, key_dim)
+        self.value_projection = nn.Linear(encoder_dim * 2, value_dim)
 
     def forward(self, utterances, utterance_lengths):
         h = utterances
@@ -149,76 +149,76 @@ class LockedDropout(nn.Module):
 		mask = mask.expand_as(x)
 		return mask * x
 
-class Encoder(nn.Module):
-	def __init__(self,ninp=40,nhid=256,nout=128,bidirectional=True,hdrop=0.3):
-		super(Encoder, self).__init__()
-		self.lockdrop = LockedDropout()
+# class Encoder(nn.Module):
+# 	def __init__(self,ninp=40,nhid=256,nout=128,bidirectional=True,hdrop=0.3):
+# 		super(Encoder, self).__init__()
+# 		self.lockdrop = LockedDropout()
 
-		#encoders
-		self.rnns=[]
-		mult = 2 if bidirectional else 1
-		#input decode LSTM
+# 		#encoders
+# 		self.rnns=[]
+# 		mult = 2 if bidirectional else 1
+# 		#input decode LSTM
 
-		#pyramidal LSTM
-		self.rnns.append(nn.LSTM(ninp,nhid,1,dropout=0,bidirectional=bidirectional,batch_first=True))
-		self.rnns.append(nn.LSTM(nhid*mult*2,nhid,1,dropout=0,bidirectional=bidirectional,batch_first=True))
-		self.rnns.append(nn.LSTM(nhid*mult*2,nhid,1,dropout=0,bidirectional=bidirectional,batch_first=True))
+# 		#pyramidal LSTM
+# 		self.rnns.append(nn.LSTM(ninp,nhid,1,dropout=0,bidirectional=bidirectional,batch_first=True))
+# 		self.rnns.append(nn.LSTM(nhid*mult*2,nhid,1,dropout=0,bidirectional=bidirectional,batch_first=True))
+# 		self.rnns.append(nn.LSTM(nhid*mult*2,nhid,1,dropout=0,bidirectional=bidirectional,batch_first=True))
 
-		self.rnns = nn.ModuleList(self.rnns)
+# 		self.rnns = nn.ModuleList(self.rnns)
 
-		#key,value projection
-		self.key_proj = nn.Linear(nhid*mult,nout)
-		self.val_proj = nn.Linear(nhid*mult,nout)
+# 		#key,value projection
+# 		self.key_proj = nn.Linear(nhid*mult,nout)
+# 		self.val_proj = nn.Linear(nhid*mult,nout)
 
-		self.nhid = nhid
-		self.ninp = ninp
-		self.nout = nout
-		self.hdrop = hdrop
-		self.init_weights()
+# 		self.nhid = nhid
+# 		self.ninp = ninp
+# 		self.nout = nout
+# 		self.hdrop = hdrop
+# 		self.init_weights()
 
-	def init_weights(self):
-		init_range = 0.1
-		self.key_proj.bias.data.fill_(0)
-		# self.val_proj.bias.data.fill_(0)
-		torch.nn.init.xavier_uniform_(self.key_proj.weight.data)
-		# torch.nn.init.xavier_uniform(self.val_proj.weight.data)
-
-
-	def forward(self,input,lens):
-		var = input
-		var = nn.utils.rnn.pack_padded_sequence(var,lens,batch_first=True)
-		var,_ = self.rnns[0](var)
-		var,lens = nn.utils.rnn.pad_packed_sequence(var,batch_first=True)
-		var = var.contiguous()
-		var = self.lockdrop(var,0.2).contiguous()
-
-		#second pyramid op
-		if var.size()[1] % 2 == 1:
-			var = var[:,:-1,:].contiguous()
-		var = var.view((int(var.size()[0]),int(var.size()[1]/2),int(var.size()[2]*2)))
-		lens = [int(l / 2) for l in lens]
-		var = nn.utils.rnn.pack_padded_sequence(var,lens,batch_first=True)
-		var,_ = self.rnns[1](var)
-		var,lens = nn.utils.rnn.pad_packed_sequence(var,batch_first=True)
-		var = var.contiguous()
-		var = self.lockdrop(var,0.1).contiguous()
-
-		#third pyramid op
-		if var.size()[1] % 2 == 1:
-			var = var[:,:-1,:].contiguous()
-		var = var.view((int(var.size()[0]),int(var.size()[1]/2),int(var.size()[2]*2)))
-		lens = [int(l / 2) for l in lens]
-		var = nn.utils.rnn.pack_padded_sequence(var,lens,batch_first=True)
-		var,_ = self.rnns[2](var)
-		var,lens = nn.utils.rnn.pad_packed_sequence(var,batch_first=True)
-		var = var.contiguous()
-		#var = self.lockdrop(var,self.hdrop).contiguous()
-
-		keys = self.key_proj(var)
-		values = self.val_proj(var)
+# 	def init_weights(self):
+# 		init_range = 0.1
+# 		self.key_proj.bias.data.fill_(0)
+# 		# self.val_proj.bias.data.fill_(0)
+# 		torch.nn.init.xavier_uniform_(self.key_proj.weight.data)
+# 		# torch.nn.init.xavier_uniform(self.val_proj.weight.data)
 
 
-		return keys,values,lens
+# 	def forward(self,input,lens):
+# 		var = input
+# 		var = nn.utils.rnn.pack_padded_sequence(var,lens,batch_first=True)
+# 		var,_ = self.rnns[0](var)
+# 		var,lens = nn.utils.rnn.pad_packed_sequence(var,batch_first=True)
+# 		var = var.contiguous()
+# 		var = self.lockdrop(var,0.2).contiguous()
+
+# 		#second pyramid op
+# 		if var.size()[1] % 2 == 1:
+# 			var = var[:,:-1,:].contiguous()
+# 		var = var.view((int(var.size()[0]),int(var.size()[1]/2),int(var.size()[2]*2)))
+# 		lens = [int(l / 2) for l in lens]
+# 		var = nn.utils.rnn.pack_padded_sequence(var,lens,batch_first=True)
+# 		var,_ = self.rnns[1](var)
+# 		var,lens = nn.utils.rnn.pad_packed_sequence(var,batch_first=True)
+# 		var = var.contiguous()
+# 		var = self.lockdrop(var,0.1).contiguous()
+
+# 		#third pyramid op
+# 		if var.size()[1] % 2 == 1:
+# 			var = var[:,:-1,:].contiguous()
+# 		var = var.view((int(var.size()[0]),int(var.size()[1]/2),int(var.size()[2]*2)))
+# 		lens = [int(l / 2) for l in lens]
+# 		var = nn.utils.rnn.pack_padded_sequence(var,lens,batch_first=True)
+# 		var,_ = self.rnns[2](var)
+# 		var,lens = nn.utils.rnn.pad_packed_sequence(var,batch_first=True)
+# 		var = var.contiguous()
+# 		#var = self.lockdrop(var,self.hdrop).contiguous()
+
+# 		keys = self.key_proj(var)
+# 		values = self.val_proj(var)
+
+
+# 		return keys,values,lens
 
 class ALSTMCell(nn.LSTMCell):
 	def __init__(self,*args,**kwargs):
