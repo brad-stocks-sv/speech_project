@@ -132,11 +132,13 @@ def getbatch(data,labels,i,batch_size):
 	xd = Variable(torch.from_numpy(xd)).float().contiguous()
 	tx = Variable(torch.from_numpy(td)).long().contiguous()
 	ty = Variable(torch.from_numpy(ty)).long().contiguous()
+	xl = Variable(torch.from_numpy(xl))
 	# masks = torch.from_numpy(masks)
 	if cuda:
 		xd = xd.cuda()
 		tx = tx.cuda()
 		ty = ty.cuda()
+		xl = xl.cuda()
 	return xd,xl,tx,ty,tl
 
 
@@ -191,13 +193,13 @@ def train():
 	print(training_data.shape[0])
 	for i in range(0,training_data.shape[0],batch_size):
 		print(i)
-		print(batch_size)
+		# print(batch_size)
 		optimizer.zero_grad()
 		acoustic_features,acoustic_lens,full_labels,labels,label_lens = getbatch(validation_data,validation_transcripts,i,batch_size)
-		print(acoustic_features.size())
-		print(acoustic_lens)
-		print(full_labels.size())
-		print(label_lens)
+		# print(acoustic_features.size())
+		# print(acoustic_lens)
+		# print(full_labels.size())
+		# print(label_lens)
 		keys,values,enc_lens = modelEncoder(acoustic_features,acoustic_lens)
 		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,:-1])
 		masks = createMasks(label_lens,max(label_lens)).float().unsqueeze(2)

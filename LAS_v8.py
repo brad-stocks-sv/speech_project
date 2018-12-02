@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torch.autograd import Variable
+from torch.nn.utils.rnn import PackedSequence
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.utils.data import DataLoader, Dataset
+from torch.utils.data.dataloader import _use_shared_memory
 # Emb instead of oneHot  ----> done?
 # need to mask attention ----> done?
 # maybe implement psi    ----> ????
@@ -22,7 +26,7 @@ class SequenceShuffle(nn.Module):
         padded = padded.view(padded.size(0), padded.size(1) // 2, 2 * padded.size(2))
         padded = padded.transpose(0, 1)
         newlens = np.array(lens) // 2
-        newseq = pack_padded_sequence(padded, newlens)
+        newseq = nn.utils.rnn.pack_padded_sequence(padded, newlens)
         return newseq
 
 
@@ -59,24 +63,24 @@ class pLSTM(AdvancedLSTM):
 
 class EncoderModel(nn.Module):
     # Encodes utterances to produce keys and values
-    def __init__(self, encoder_dim=256, key_dim=128, value_dim=128):
+    def __init__(self, ninp=40, encoder_dim=256, key_dim=128, value_dim=128):
         super(EncoderModel, self).__init__()
         self.rnns = nn.ModuleList()
-        self.rnns.append(AdvancedLSTM(INPUT_DIM, encoder_dim, bidirectional=True))
-        self.rnns.append(pLSTM(args.encoder_dim * 4, encoder_dim, bidirectional=True))
-        self.rnns.append(pLSTM(args.encoder_dim * 4, encoder_dim, bidirectional=True))
-        self.rnns.append(pLSTM(args.encoder_dim * 4, encoder_dim, bidirectional=True))
+        self.rnns.append(AdvancedLSTM(ninp, encoder_dim, bidirectional=True))
+        self.rnns.append(pLSTM(encoder_dim * 4, encoder_dim, bidirectional=True))
+        self.rnns.append(pLSTM(encoder_dim * 4, encoder_dim, bidirectional=True))
+        self.rnns.append(pLSTM(encoder_dim * 4, encoder_dim, bidirectional=True))
         self.key_projection = nn.Linear(encoder_dim * 2, key_dim)
         self.value_projection = nn.Linear(encoder_dim * 2, value_dim)
 
     def forward(self, utterances, utterance_lengths):
-        h = utterances
+        h = utterances.permute(1, 0, 2)
 
         # Sort and pack the inputs
         sorted_lengths, order = torch.sort(utterance_lengths, 0, descending=True)
         _, backorder = torch.sort(order, 0)
         h = h[:, order, :]
-        h = pack_padded_sequence(h, sorted_lengths.data.cpu().numpy())
+        h = nn.utils.rnn.pack_padded_sequence(h, sorted_lengths.data.cpu().numpy())
 
         # RNNs
         for rnn in self.rnns:
@@ -89,7 +93,7 @@ class EncoderModel(nn.Module):
         if backorder.data.is_cuda:
             output_lengths = output_lengths.cuda()
         output_lengths = output_lengths[backorder.data]
-
+        h = h.permute(1, 0, 2)
         # Apply key and value
         keys = self.key_projection(h)
         values = self.value_projection(h)
@@ -342,7 +346,6 @@ class Attention(nn.Module):
 		maxseq = max(lens)
 		masks = createMasks(lens,maxseq).float()
 		keys = keys.transpose(1,2)
-
 		energy = torch.bmm(query.unsqueeze(1),keys).squeeze(1) * masks
 		
 		energy = energy - (1 - masks) * 1e6
