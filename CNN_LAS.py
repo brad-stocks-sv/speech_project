@@ -5,6 +5,21 @@ from torch.autograd import Variable
 cuda = torch.cuda.is_available()
 
 
+def calc_output_len(inlens,kernel_size=3,stride=1,padding=1,dilation=1):
+	return ((np.array(inlens) + 2 * padding - dilation * (kernel_size - 1) - 1)/stride + 1).astype(int)
+
+def full_run_lens(lens):
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=2,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=2,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=1,padding=1)
+	lens = calc_output_len(lens,kernel_size=3,stride=2,padding=1)
+	return lens
+
 def sample_gumbel(shape, eps=1e-10, out=None):
 	"""
 	Sample from Gumbel(0, 1)
@@ -29,9 +44,9 @@ def createMasks(lens,maxseq):
 	return rmasks
 
 
-class Encoder(nn.Module):
+class ConvEncoder(nn.Module):
 	def __init__(self,ninp=40,nout=128):
-		super(Encoder, self).__init__()
+		super(ConvEncoder, self).__init__()
 		self.convnet = []
 		self.convnet.append(nn.Conv1d(in_channels=ninp,out_channels=64,kernel_size=3,stride=1,padding=1))
 		self.convnet.append(nn.BatchNorm1d(64))
@@ -42,7 +57,7 @@ class Encoder(nn.Module):
 		self.convnet.append(nn.Conv1d(in_channels=64,out_channels=64,kernel_size=3,stride=2,padding=1))
 		self.convnet.append(nn.BatchNorm1d(64))
 		self.convnet.append(nn.LeakyReLU())
-		self.convnet.append(nn.Conv1d(in_channels=128,out_channels=128,kernel_size=3,stride=1,padding=1))
+		self.convnet.append(nn.Conv1d(in_channels=64,out_channels=128,kernel_size=3,stride=1,padding=1))
 		self.convnet.append(nn.BatchNorm1d(128))
 		self.convnet.append(nn.LeakyReLU())
 		self.convnet.append(nn.Conv1d(in_channels=128,out_channels=128,kernel_size=3,stride=1,padding=1))
@@ -65,10 +80,8 @@ class Encoder(nn.Module):
 		self.key_proj = nn.Linear(256,nout)
 		self.val_proj = nn.Linear(256,nout)
 
-		self.nhid = nhid
 		self.ninp = ninp
 		self.nout = nout
-		self.hdrop = hdrop
 		self.init_weights()
 
 	def init_weights(self):
@@ -80,9 +93,10 @@ class Encoder(nn.Module):
 
 
 	def forward(self,input,lens):
-		#var = self.lockdrop(var,self.hdrop).contiguous()
 		var = self.convnet(input)
-		lens = np.array(lens)//8
+		var = var.transpose(2,1)
+		lens = full_run_lens(lens)
+		# lens = np.array(lens)//8 + 1
 		keys = self.key_proj(var)
 		values = self.val_proj(var)
 
@@ -136,7 +150,6 @@ class Decoder(nn.Module):
 	# 	# torch.nn.init.xavier_uniform(self.char_proj.weight.data)
 	# 	# self.char_proj.bias.data = torch.from_numpy(np.load('lb.npy')).float()
 	# 	for l in self.char_proj:
-	# 		if 
 	# 		torch.nn.init.xavier_uniform(l.weight.data)
 	# 	self.char_proj[1].bias.data = torch.from_numpy(np.load('lb34.npy')).float()
 	# 	self.char_proj[0].bias.data.fill_(0)
@@ -211,9 +224,10 @@ class Attention(nn.Module):
 		maxseq = max(lens)
 		masks = createMasks(lens,maxseq).float()
 		keys = keys.transpose(1,2)
-
+		print(masks.shape)
+		print(keys.shape)
 		energy = torch.bmm(query.unsqueeze(1),keys).squeeze(1) * masks
-		
+
 		energy = energy - (1 - masks) * 1e6
 		energy_max = torch.max(energy,1)[0].unsqueeze(1)
 		energy = torch.exp(energy - energy_max) * masks
