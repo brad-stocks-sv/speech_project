@@ -6,6 +6,12 @@ from torch.autograd import Variable
 import os
 import operator
 from LAS_v8 import *
+from tqdm import tqdm
+import time
+from tensorboardX import SummaryWriter
+import shutil
+import matplotlib.pyplot as plt
+
 # import gc
 cuda = torch.cuda.is_available()
 batch_size = 32
@@ -14,25 +20,27 @@ log_step = 50
 
 LSTM_encoder = True
 
+batch_times = []
+train_losses = []
+val_losses = []
+
+val_strings = []
+val_labels = []
+
+train_steps = 0
+val_steps = 0
+
+if not os.path.isdir("logs"):
+	os.mkdir("logs")
+else:
+	shutil.rmtree("logs")
+writer = SummaryWriter(log_dir="logs")
 
 def repackage_hidden(h):
     if isinstance(h, Variable):
         return Variable(h.data)
     else:
         return tuple(repackage_hidden(v) for v in h)
-
-
-# def compute_loss(logits,target,length):
-# 	logits_flat = logits.view(-1,logits.size(-1))
-# 	logits_probs_flat = torch.nn.functional.log_softmax(logits_flat)
-# 	target_flat = target.view(-1,1)
-# 	loss_flat = -torch.gather(log_probs_flat,dim=1,index=target_flat)
-# 	losses = losses_flat.view(*target.size())
-# 	mask =_sequence_mask(sequence_length=length,max_len=target.size(1))
-# 	losses = losses * mask.float()
-# 	loss = losses.sum()/length.float().sum()
-# 	return loss
-
 
 def unpack_concatenate_predseq(predseq, lens):
 	retseq = []
@@ -47,14 +55,14 @@ def translate_2(predseq,labelseq,lens):
 	for p,l,seqlen in zip(predseq,labelseq,lens):
 		p = p[:seqlen]
 		l = l[:seqlen]
-		_,index = torch.max(p,dim=-1)
-		for charx,chary in zip(index,l):
+		for charx,chary in zip(p,l):
 			rstr += LABEL_DICTIONARY[charx]
 			labelstr += LABEL_DICTIONARY[chary]
-	print("PREDICTED: \n" + rstr)
-	print("LABEL SEQUENCE: \n" + labelstr)
-
-
+		rstr += "\n"
+		labelstr += "\n"
+	# else:
+	# 	writer.add_text("validation_predictions",labelstr)
+	return rstr,labelstr
 
 def translate(predseq,labelseq):
 	rstr = ""
@@ -63,8 +71,9 @@ def translate(predseq,labelseq):
 	for p,l in zip(index,labelseq):
 		rstr += LABEL_DICTIONARY[p]
 		labelstr += LABEL_DICTIONARY[l]
-	print("PREDICTED SEQUENCE: \n" + rstr)
-	print("LABEL SEQUENCE: \n" + labelstr)
+	# print("PREDICTED SEQUENCE: \n" + rstr)
+	# print("LABEL SEQUENCE: \n" + labelstr)
+	return rstr,labelstr
 
 def get_train_data():
 	current_dir = os.path.dirname(os.path.realpath(__file__))
@@ -165,9 +174,12 @@ def validate():
 	modelEncoder.eval()
 	modelDecoder.eval()
 	total_loss = 0
-	all_attentions = []
-	all_generated= []
-	for i in range(0,validation_data.shape[0],batch_size):
+	val_attentions = []
+	val_preds = []
+	val_labels = []
+	total_loss = 0
+	for i in tqdm(range(0,validation_data.shape[0],batch_size)):
+		start = time.time()
 		acoustic_features,acoustic_lens,full_labels,_,label_lens = getbatch(validation_data,validation_transcripts,i,batch_size)
 		keys,values,enc_lens = modelEncoder(acoustic_features,acoustic_lens)
 		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,:-1])
@@ -175,31 +187,39 @@ def validate():
 		logits = (logits.transpose(1,0) * masks).contiguous()
 		loss = criterion(logits.view(-1,logits.size(2)),full_labels[:,1:].contiguous().view(-1))
 		loss = torch.sum(masks.view(-1) * loss)/logits.size(1)
+		val_losses.append(loss.item())
+		end = time.time()
+		batch_times.append(end - start)
 		total_loss += loss.item()
-		all_attentions.append(attentions.cpu().detach().numpy())
-		all_generated.append(generated.cpu().detach().numpy())
-	#all_attentions = torch.cat(all_attentions,dim=0)
-	#outputs = torch.cat(outputs,dim=0)
-	np.save('generated.npy',all_generated)
-	np.save('attentions.npy',all_attentions)
+		val_attentions.append(attentions.cpu().detach().numpy())
+		pred_string,true_string = translate_2(generated.detach(),full_labels,label_lens)
+		fig = plt.figure()
+		if i % log_step == 0:
+			writer.add_image("validation_attention",attentions[0])
+		writer.add_scalar("validation_loss",loss.item(),val_steps)
+		writer.add_text("validation_predictions",pred_string)
+		val_preds.append(pred_string)
+		val_labels.append(true_string)
+		val_steps += 1
+	np.save("validation_predictions.npy",val_pred)
+	np.save("validation_attentions.npy",val_attentions)
+	np.save("validation_losses.npy",val_losses)
+	if os.path.isfile("validation_labels.npy"):
+		np.save("validation_labels.npy",val_labels)
 	total_loss = total_loss / validation_data.shape[0]
 	print("Validation Loss: " + str(total_loss))
 	return total_loss
 
 def train():
+	train_strings = []
+	train_labels = []
+	train_attentions = []
 	modelEncoder.train()
 	modelDecoder.train()
-	total_loss = 0
-	print(training_data.shape[0])
-	for i in range(0,training_data.shape[0],batch_size):
-		print(i)
-		# print(batch_size)
+	for i in tqdm(range(0,training_data.shape[0],batch_size)):
+		start = time.time()
 		optimizer.zero_grad()
 		acoustic_features,acoustic_lens,full_labels,labels,label_lens = getbatch(validation_data,validation_transcripts,i,batch_size)
-		# print(acoustic_features.size())
-		# print(acoustic_lens)
-		# print(full_labels.size())
-		# print(label_lens)
 		keys,values,enc_lens = modelEncoder(acoustic_features,acoustic_lens)
 		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,:-1])
 		masks = createMasks(label_lens,max(label_lens)).float().unsqueeze(2)
@@ -209,12 +229,23 @@ def train():
 		loss.backward()
 		torch.nn.utils.clip_grad_norm(list(modelEncoder.parameters())+list(modelDecoder.parameters()),grad_clip)
 		optimizer.step()
-		total_loss += loss.item()
-		if i % log_step == 0 and i > 0:
-			curr_loss = total_loss / log_step
-			print(curr_loss)
-			total_loss = 0
-			#translate(ps.data,ty.data)
+		train_losses.append(loss.item())
+		end = time.time()
+		batch_times.append(end - start)
+		pred_string,true_string = translate_2(generated.detach(),full_labels,label_lens)
+		if i % log_step == 0:
+			writer.add_image("train_attention",attentions[0])
+		writer.add_text("train_predictions",pred_string)
+		writer.add_scalar("train_loss",loss.item(),train_steps)
+		train_strings.append(pred_string)
+		train_labels.append(true_string)
+		train_attentions.append(attentions.cpu().detach().numpy())
+		train_steps += 1
+	np.save("train_predictions.npy",np.array(train_strings))
+	np.save("train_attentions.npy",np.array(train_attentions))
+	np.save("train_losses.npy",np.array(train_losses))
+	if os.path.isfile("train_labels.npy"):
+		np.save("train_labels.npy",np.array(train_labels))
 
 
 save_fileenc = "encoder.pt"
