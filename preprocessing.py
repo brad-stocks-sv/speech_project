@@ -38,7 +38,7 @@ np.save("data/lb34.npy",lb34)
 label_map = {s:i for i,s in enumerate(sorted(characters.keys()))}
 label_map["("] = len(label_map)
 label_map[")"] = len(label_map)
-print(label_map)
+np.save(os.getcwd() + "/data/label_map.npy",label_map)
 intefy(train_transcripts,label_map,"train")
 intefy(dev_transcripts,label_map,"dev")
 
