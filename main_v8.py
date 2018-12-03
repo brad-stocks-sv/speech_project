@@ -12,7 +12,7 @@ from tensorboardX import SummaryWriter
 import shutil
 import matplotlib.pyplot as plt
 
-# import gc
+label_map = {0: ' ', 1: "'", 2: '+', 3: '-', 4: '.', 5: 'A', 6: 'B', 7: 'C', 8: 'D', 9: 'E', 10: 'F', 11: 'G', 12: 'H', 13: 'I', 14: 'J', 15: 'K', 16: 'L', 17: 'M', 18: 'N', 19: 'O', 20: 'P', 21: 'Q', 22: 'R', 23: 'S', 24: 'T', 25: 'U', 26: 'V', 27: 'W', 28: 'X', 29: 'Y', 30: 'Z', 31: '_', 32: '(', 33: ')'}
 cuda = torch.cuda.is_available()
 batch_size = 32
 grad_clip = 0.25
@@ -52,12 +52,12 @@ def unpack_concatenate_predseq(predseq, lens):
 def translate_2(predseq,labelseq,lens):
 	rstr = ""
 	labelstr = ""
-	for p,l,seqlen in zip(predseq,labelseq,lens):
+	for p,l,seqlen in zip(predseq.numpy(),labelseq.numpy(),lens):
 		p = p[:seqlen]
 		l = l[:seqlen]
 		for charx,chary in zip(p,l):
-			rstr += LABEL_DICTIONARY[charx]
-			labelstr += LABEL_DICTIONARY[chary]
+			rstr += label_map[charx]
+			labelstr += label_map[chary]
 		rstr += "\n"
 		labelstr += "\n"
 	# else:
@@ -69,8 +69,8 @@ def translate(predseq,labelseq):
 	labelstr = ""
 	_,index = torch.max(predseq,dim=-1)
 	for p,l in zip(index,labelseq):
-		rstr += LABEL_DICTIONARY[p]
-		labelstr += LABEL_DICTIONARY[l]
+		rstr += label_map[p]
+		labelstr += label_map[l]
 	# print("PREDICTED SEQUENCE: \n" + rstr)
 	# print("LABEL SEQUENCE: \n" + labelstr)
 	return rstr,labelstr
@@ -171,6 +171,7 @@ criterion = nn.CrossEntropyLoss(reduce=False)
 
 
 def validate():
+	global val_steps
 	modelEncoder.eval()
 	modelDecoder.eval()
 	total_loss = 0
@@ -213,6 +214,7 @@ def validate():
 	return total_loss
 
 def train():
+	global train_steps
 	train_strings = []
 	train_labels = []
 	train_attentions = []
