@@ -168,7 +168,10 @@ def validate():
 	all_attentions = []
 	all_generated= []
 	for i in range(0,validation_data.shape[0],batch_size):
+		print(i)
 		acoustic_features,acoustic_lens,full_labels,_,label_lens = getbatch(validation_data,validation_transcripts,i,batch_size)
+		if len(acoustic_lens) == 0:
+			continue
 		keys,values,enc_lens = modelEncoder(acoustic_features,acoustic_lens)
 		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,:-1])
 		masks = createMasks(label_lens,max(label_lens)).float().unsqueeze(2)
@@ -195,7 +198,9 @@ def train():
 		print(i)
 		# print(batch_size)
 		optimizer.zero_grad()
-		acoustic_features,acoustic_lens,full_labels,labels,label_lens = getbatch(validation_data,validation_transcripts,i,batch_size)
+		acoustic_features,acoustic_lens,full_labels,labels,label_lens = getbatch(training_data,training_transcripts,i,batch_size)
+		if len(acoustic_lens) == 0:
+			continue
 		# print(acoustic_features.size())
 		# print(acoustic_lens)
 		# print(full_labels.size())
