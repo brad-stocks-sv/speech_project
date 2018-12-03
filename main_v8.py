@@ -181,6 +181,8 @@ def validate():
 	for i in tqdm(range(0,validation_data.shape[0],batch_size)):
 		start = time.time()
 		acoustic_features,acoustic_lens,full_labels,_,label_lens = getbatch(validation_data,validation_transcripts,i,batch_size)
+		if len(acoustic_lens) == 0:
+			continue
 		keys,values,enc_lens = modelEncoder(acoustic_features,acoustic_lens)
 		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,:-1])
 		masks = createMasks(label_lens,max(label_lens)).float().unsqueeze(2)
