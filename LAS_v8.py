@@ -293,7 +293,7 @@ class Decoder(nn.Module):
 		return logit,gen_t,context,attention,n_input_states
 
 
-	def forward(self,keys,values,lens,inputs,teacher_force_rate=1,future=0):
+	def forward(self,keys,values,lens,inputs,teacher_force_rate=0.9,future=0):
 		outputs = []
 		attentions = []
 		bsz = inputs.size(0)

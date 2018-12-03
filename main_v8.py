@@ -18,6 +18,11 @@ batch_size = 32
 grad_clip = 0.25
 log_step = 50
 
+load = False
+save_fileenc = "encoder.pt"
+save_filedec = "decoder.pt"
+epoch = 100
+
 LSTM_encoder = True
 
 batch_times = []
@@ -52,7 +57,7 @@ def unpack_concatenate_predseq(predseq, lens):
 def translate_2(predseq,labelseq,lens):
 	rstr = ""
 	labelstr = ""
-	for p,l,seqlen in zip(predseq.numpy(),labelseq.numpy(),lens):
+	for p,l,seqlen in zip(predseq.cpu().numpy(),labelseq.cpu().numpy(),lens):
 		p = p[:seqlen]
 		l = l[:seqlen]
 		for charx,chary in zip(p,l):
@@ -157,6 +162,10 @@ if LSTM_encoder:
 else:
 	modelEncoder = ConvEncoder()
 modelDecoder = Decoder()
+if load:
+	modelEncoder.load_state_dict(torch.load(save_fileenc))
+	modelDecoder.load_state_dict(torch.load(save_filedec))
+
 print(modelEncoder)
 print(modelDecoder)
 if cuda:
@@ -198,13 +207,14 @@ def validate():
 		pred_string,true_string = translate_2(generated.detach(),full_labels,label_lens)
 		fig = plt.figure()
 		if i % log_step == 0:
-			writer.add_image("validation_attention",attentions[0])
+			scaling = np.max(val_attentions[-1][0])
+			writer.add_image("validation_attention",((val_attentions[-1][0])/scaling)*255, val_steps)
 		writer.add_scalar("validation_loss",loss.item(),val_steps)
-		writer.add_text("validation_predictions",pred_string)
+		writer.add_text("validation_predictions",pred_string, val_steps)
 		val_preds.append(pred_string)
 		val_labels.append(true_string)
 		val_steps += 1
-	np.save("validation_predictions.npy",val_pred)
+	np.save("validation_predictions.npy",val_preds)
 	np.save("validation_attentions.npy",val_attentions)
 	np.save("validation_losses.npy",val_losses)
 	if os.path.isfile("validation_labels.npy"):
@@ -223,7 +233,9 @@ def train():
 	for i in tqdm(range(0,training_data.shape[0],batch_size)):
 		start = time.time()
 		optimizer.zero_grad()
-		acoustic_features,acoustic_lens,full_labels,labels,label_lens = getbatch(validation_data,validation_transcripts,i,batch_size)
+		acoustic_features,acoustic_lens,full_labels,labels,label_lens = getbatch(training_data,training_transcripts,i,batch_size)
+		if len(acoustic_lens) == 0:
+			continue
 		keys,values,enc_lens = modelEncoder(acoustic_features,acoustic_lens)
 		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,:-1])
 		masks = createMasks(label_lens,max(label_lens)).float().unsqueeze(2)
@@ -237,24 +249,24 @@ def train():
 		end = time.time()
 		batch_times.append(end - start)
 		pred_string,true_string = translate_2(generated.detach(),full_labels,label_lens)
+		train_attentions.append(attentions.cpu().detach().numpy())
 		if i % log_step == 0:
-			writer.add_image("train_attention",attentions[0])
-		writer.add_text("train_predictions",pred_string)
+			scaling = np.max(train_attentions[-1][0])
+			writer.add_image("train_attention",(train_attentions[-1][0]/scaling)*255, train_steps)
+		writer.add_text("train_predictions",pred_string, train_steps)
 		writer.add_scalar("train_loss",loss.item(),train_steps)
+		writer.add_scalar("batch_time",batch_times[-1],train_steps)
 		train_strings.append(pred_string)
 		train_labels.append(true_string)
-		train_attentions.append(attentions.cpu().detach().numpy())
 		train_steps += 1
 	np.save("train_predictions.npy",np.array(train_strings))
 	np.save("train_attentions.npy",np.array(train_attentions))
 	np.save("train_losses.npy",np.array(train_losses))
+	np.save('timers.npy', np.array(batch_times))
 	if os.path.isfile("train_labels.npy"):
 		np.save("train_labels.npy",np.array(train_labels))
 
 
-save_fileenc = "encoder.pt"
-save_filedec = "decoder.pt"
-epoch = 100
 best_loss = validate()
 
 for e in range(epoch):
@@ -268,7 +280,7 @@ for e in range(epoch):
                 best_loss = curr_loss
         else:
                 print("Overfit?")
-                with open(save_fileenc,'wb') as f:
-                        torch.save(modelEncoder.state_dict(),f)
-                with open(save_filedec,'wb') as f:
-                        torch.save(modelDecoder.state_dict(),f)
+                # with open(save_fileenc,'wb') as f:
+                #         torch.save(modelEncoder.state_dict(),f)
+                # with open(save_filedec,'wb') as f:
+                #         torch.save(modelDecoder.state_dict(),f)
