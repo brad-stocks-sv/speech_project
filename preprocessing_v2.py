@@ -28,7 +28,7 @@ def transcripts_unbyte(transcripts,prepend):
 				sentence+= word.decode("utf-8") + " "
 		sentence = "(" + sentence[:-1] + ")"
 		sentences.append(sentence)
-	np.save("/data/nb_" + prepend + "_transcripts.npy",np.array(sentences))
+	np.save("./data/nb_" + prepend + "_transcripts.npy",np.array(sentences))
 	return sentences
 
 def transcripts_intefy(transcripts,prepend):
@@ -37,9 +37,8 @@ def transcripts_intefy(transcripts,prepend):
 		l = []
 		for ch in t:
 			l.append(char_map[ch])
-		print(l)
-		labels.append(l)
-	np.save("/data/" + prepend + "_labels.npy",np.array(labels))
+		labels.append(np.array(l))
+	np.save("./data/" + prepend + "_labels.npy",np.array(labels))
 
 ttnb = transcripts_unbyte(train_transcripts,"train")
 dtnb =transcripts_unbyte(dev_transcripts,"dev")

@@ -223,9 +223,6 @@ class Attention(nn.Module):
 	def forward(self,keys,values,lens,query):
 		maxseq = max(lens)
 		masks = createMasks(lens,maxseq).float()
-		#print(keys.shape)
-		#print(query.shape)
-		#print(masks.shape)
 		keys = keys.transpose(1,2)
 		energy = torch.bmm(query.unsqueeze(1),keys).squeeze(1) * masks
 

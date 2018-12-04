@@ -84,14 +84,14 @@ def translate(predseq,labelseq):
 def get_train_data():
 	current_dir = os.path.dirname(os.path.realpath(__file__))
 	data_path = current_dir + '/data'
-	training_data = np.load(data_path+'/train.npy')
+	training_data = np.load(data_path+'/train.npy',encoding='bytes')
 	training_labels = np.load(data_path+'/train_labels.npy')
 	return training_data,training_labels
 
 def get_validation_data():
 	current_dir = os.path.dirname(os.path.realpath(__file__))
 	data_path = current_dir + '/data'
-	dev_data = np.load(data_path+'/dev.npy')
+	dev_data = np.load(data_path+'/dev.npy',encoding='bytes')
 	dev_labels = np.load(data_path+'/dev_labels.npy')
 	return dev_data,dev_labels
 
