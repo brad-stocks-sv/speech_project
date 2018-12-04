@@ -37,6 +37,7 @@ def transcripts_intefy(transcripts,prepend):
 		l = []
 		for ch in t:
 			l.append(char_map[ch])
+		print(l)
 		labels.append(l)
 	np.save("/data/" + prepend + "_labels.npy",np.array(labels))
 
