@@ -240,10 +240,10 @@ def train():
 		if len(acoustic_lens) == 0:
 			continue
 		keys,values,enc_lens = modelEncoder(acoustic_features,acoustic_lens)
-		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,:-1])
+		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,1:])
 		masks = createMasks(label_lens,max(label_lens)).float().unsqueeze(2)
 		logits = (logits.transpose(1,0) * masks).contiguous()
-		loss = criterion(logits.contiguous().view(-1,logits.size(2)),full_labels[:,1:].contiguous().view(-1))
+		loss = criterion(logits.contiguous().view(-1,logits.size(2)),full_labels[:,:-1].contiguous().view(-1))
 		loss = torch.sum(masks.view(-1) * loss)/logits.size(1)
 		loss.backward()
 		torch.nn.utils.clip_grad_norm(list(modelEncoder.parameters())+list(modelDecoder.parameters()),grad_clip)
