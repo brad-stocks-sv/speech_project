@@ -480,6 +480,9 @@ class SubmissionCallback(Callback):
 
     def end_of_validation_run(self, **_):
         step = self.trainer.iteration_count
+        with open(os.path.join(self.args.save_directory, 'model-{:012d}.pt'.format(step))) as f:
+            torch.save(self.trainer.model.state_dict(), f)
+            print("Saved mutha fucka")
         write_transcripts(
             path=os.path.join(self.args.save_directory, 'submission-{:012d}.csv'.format(step)),
             model=self.trainer.model,
@@ -587,7 +590,7 @@ def run(args):
         print("model loaded")
         if args.cuda:
             model = model.cuda()
-    if True:
+    if False:
         optimizer = torch.optim.Adam(model.parameters(),lr=1e-3,weight_decay=1e-5)
         for epoch in range(args.epochs):
             train(model, train_data, SequenceCrossEntropy(), optimizer, args)
@@ -606,7 +609,7 @@ def run(args):
         trainer.logger.observe_state('attention')
 
         # Bind loaders
-        trainer.bind_loader('train', train_loader, num_inputs=4, num_targets=1)
+        trainer.bind_loader('train', dev_loader, num_inputs=4, num_targets=1)
         trainer.bind_loader('validate', dev_loader, num_inputs=4, num_targets=1)
         trainer.register_callback(SubmissionCallback(
             args=args,
