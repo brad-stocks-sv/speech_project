@@ -6,6 +6,7 @@ from torch.autograd import Variable
 import os
 import operator
 from CNN_LAS import *
+from tqdm import trange,tqdm
 # import gc
 cuda = torch.cuda.is_available()
 batch_size = 32
@@ -130,10 +131,10 @@ def getbatch(data,labels,i,batch_size):
 	bsz = min(batch_size,data.shape[0] - i)
 	xd,xl,td,ty,tl = prep_data(data[i:i+bsz],labels[i:i+bsz])
 	xd = Variable(torch.from_numpy(xd)).float().contiguous()
-	xd = xd.transpose(2,1).contiguous()
+	#print(xd.shape)
+	xd = xd.permute(0,2,1)
 	tx = Variable(torch.from_numpy(td)).long().contiguous()
 	ty = Variable(torch.from_numpy(ty)).long().contiguous()
-	print(xd.shape)
 	# masks = torch.from_numpy(masks)
 	if cuda:
 		xd = xd.cuda()
@@ -167,8 +168,11 @@ def validate():
 	total_loss = 0
 	all_attentions = []
 	all_generated= []
-	for i in range(0,validation_data.shape[0],batch_size):
+	#for i in range(0,validation_data.shape[0],batch_size):
+	for i in tqdm(range(0,validation_data.shape[0],batch_size)):
 		acoustic_features,acoustic_lens,full_labels,_,label_lens = getbatch(validation_data,validation_transcripts,i,batch_size)
+		if len(acoustic_features) == 0:
+			continue
 		keys,values,enc_lens = modelEncoder(acoustic_features,acoustic_lens)
 		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,:-1])
 		masks = createMasks(label_lens,max(label_lens)).float().unsqueeze(2)
@@ -191,15 +195,13 @@ def train():
 	modelDecoder.train()
 	total_loss = 0
 	print(training_data.shape[0])
-	for i in range(0,training_data.shape[0],batch_size):
-		print(i)
-		print(batch_size)
+	#for i in range(0,training_data.shape[0],batch_size):
+	for i in tqdm(range(0,training_data.shape[0],batch_size)):
+		#print(i)
 		optimizer.zero_grad()
-		acoustic_features,acoustic_lens,full_labels,labels,label_lens = getbatch(validation_data,validation_transcripts,i,batch_size)
-		print(acoustic_features.size())
-		print(acoustic_lens)
-		print(full_labels.size())
-		print(label_lens)
+		acoustic_features,acoustic_lens,full_labels,labels,label_lens = getbatch(training_data,training_transcripts,i,batch_size)
+		if len(acoustic_features) == 0:
+			continue
 		keys,values,enc_lens = modelEncoder(acoustic_features,acoustic_lens)
 		logits,attentions,generated = modelDecoder(keys,values,enc_lens,full_labels[:,:-1])
 		masks = createMasks(label_lens,max(label_lens)).float().unsqueeze(2)

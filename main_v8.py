@@ -5,7 +5,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 import os
 import operator
-from LAS_v8 import *
+#from LAS_v8 import *
+from CNN_LAS import *
 from tqdm import tqdm
 import time
 from tensorboardX import SummaryWriter
@@ -23,7 +24,7 @@ save_fileenc = "encoder.pt"
 save_filedec = "decoder.pt"
 epoch = 100
 
-LSTM_encoder = True
+LSTM_encoder = False
 
 batch_times = []
 train_losses = []
@@ -144,6 +145,8 @@ def getbatch(data,labels,i,batch_size):
 	bsz = min(batch_size,data.shape[0] - i)
 	xd,xl,td,ty,tl = prep_data(data[i:i+bsz],labels[i:i+bsz])
 	xd = Variable(torch.from_numpy(xd)).float().contiguous()
+	if not LSTM_encoder:
+		xd = xd.permute(0,2,1).contiguous()
 	tx = Variable(torch.from_numpy(td)).long().contiguous()
 	ty = Variable(torch.from_numpy(ty)).long().contiguous()
 	xl = Variable(torch.from_numpy(xl))
