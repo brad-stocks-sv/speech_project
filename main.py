@@ -26,6 +26,8 @@ val_losses = []
 val_strings = []
 val_labels = []
 
+attentions = []
+
 train_steps = 0
 val_steps = 0
 
@@ -35,7 +37,7 @@ def load_data(name, args, test=False):
     if test:
         labels = None
     else:
-        labels = np.load(os.path.join(args.data_directory, '{}_labels.npy'.format(name)), encoding="latin1")
+        labels = np.load(os.path.join(args.data_directory, 'nb_{}_transcripts.npy'.format(name)), encoding="latin1")
     return features, labels
 
 
@@ -424,9 +426,10 @@ def generate_transcripts(args, model, loader, charset):
         l1array = Variable(l1array)
         llens = Variable(llens)
 
-        logits, generated, lens = model(
+        logits, generated, lens, attns = model(
             uarray, ulens, l1array, llens,
             future=args.generator_length)
+        attentions = attns
         generated = generated.data.cpu().numpy()  # (L, BS)
         n = uarray.size(1)
         for i in range(n):
@@ -461,7 +464,7 @@ class SequenceCrossEntropy(nn.CrossEntropyLoss):
         super(SequenceCrossEntropy, self).__init__(*args, reduce=False, **kwargs)
 
     def forward(self, prediction, target):
-        logits, generated, sequence_lengths = prediction
+        logits, generated, sequence_lengths, attns = prediction
         maxlen = logits.size(0)
         mask = Variable(output_mask(maxlen, sequence_lengths.data)).float()
         logits = logits * mask.unsqueeze(2)
@@ -480,9 +483,10 @@ class SubmissionCallback(Callback):
 
     def end_of_validation_run(self, **_):
         step = self.trainer.iteration_count
-        with open(os.path.join(self.args.save_directory, 'model-{:012d}.pt'.format(step))) as f:
+        with open(os.path.join(self.args.save_directory, 'model-{:012d}.pt'.format(step)), 'wb') as f:
             torch.save(self.trainer.model.state_dict(), f)
             print("Saved mutha fucka")
+        np.save('attentions.npy', np.array(attentions))
         write_transcripts(
             path=os.path.join(self.args.save_directory, 'submission-{:012d}.csv'.format(step)),
             model=self.trainer.model,
@@ -579,17 +583,18 @@ def run(args):
     print("Building Loader")
     dev_loader, dev_data = make_loader(devfeats, devchars, args, shuffle=True, batch_size=args.batch_size)
     train_loader, train_data = make_loader(trainfeats, trainchars, args, shuffle=True, batch_size=args.batch_size)
-    # test_loader, test_data = make_loader(testfeats, None, args, shuffle=False, batch_size=args.batch_size)
+    test_loader, test_data = make_loader(testfeats, None, args, shuffle=False, batch_size=args.batch_size)
     print("Building Model")
     model = Seq2SeqModel(args, vocab_size=charcount)
     print("Running")
     trainer = Trainer()
-    if os.path.exists(os.path.join(args.save_directory, trainer._checkpoint_filename)):
-        trainer.load(from_directory=args.save_directory)
-        model.load_state_dict(trainer.model.state_dict())
-        print("model loaded")
-        if args.cuda:
-            model = model.cuda()
+    if False:
+        if os.path.exists(os.path.join(args.save_directory, trainer._checkpoint_filename)):
+            trainer.load(from_directory=args.save_directory)
+            model.load_state_dict(trainer.model.state_dict())
+            print("model loaded")
+            if args.cuda:
+                model = model.cuda()
     if False:
         optimizer = torch.optim.Adam(model.parameters(),lr=1e-3,weight_decay=1e-5)
         for epoch in range(args.epochs):
@@ -609,7 +614,7 @@ def run(args):
         trainer.logger.observe_state('attention')
 
         # Bind loaders
-        trainer.bind_loader('train', dev_loader, num_inputs=4, num_targets=1)
+        trainer.bind_loader('train', train_loader, num_inputs=4, num_targets=1)
         trainer.bind_loader('validate', dev_loader, num_inputs=4, num_targets=1)
         trainer.register_callback(SubmissionCallback(
             args=args,
