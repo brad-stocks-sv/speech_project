@@ -470,7 +470,8 @@ class Seq2SeqModel(nn.Module):
 		super(Seq2SeqModel, self).__init__()
 		self.encoder = EncoderModel(args)
 		if args.cnn:
-			self.encoder = ConvEncoder(args)
+			#self.encoder = ConvEncoder(args)
+			self.encoder = DenseNet()
 		self.decoder = DecoderModel(args, vocab_size=vocab_size)
 		self._state_hooks = {}
 
