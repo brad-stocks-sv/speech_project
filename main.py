@@ -229,7 +229,7 @@ class EncoderModel(nn.Module):
 
 
 class ConvEncoder(nn.Module):
-	def __init__(self,ninp=40,nout=128):
+	def __init__(self,args,ninp=40,nout=128):
 		super(ConvEncoder, self).__init__()
 		self.convnet = []
 		self.convnet.append(nn.Conv1d(in_channels=ninp,out_channels=64,kernel_size=3,stride=1,padding=1))
@@ -266,6 +266,7 @@ class ConvEncoder(nn.Module):
 
 		self.ninp = ninp
 		self.nout = nout
+		self.cuda = args.cuda
 		self.init_weights()
 
 	def init_weights(self):
@@ -279,11 +280,13 @@ class ConvEncoder(nn.Module):
 	def forward(self,input,lens):
 		var = input.permute(1,2,0)
 		var = self.convnet(var)
-		var = var.transpose(2,1)
+		var = var.permute(0,2,1)
 		lens = full_run_lens(lens)
-		# lens = np.array(lens)//8 + 1
-		keys = self.key_proj(var)
-		values = self.val_proj(var)
+		keys = self.key_proj(var).permute(1,0,2)
+		values = self.val_proj(var).permute(1,0,2)
+		lens = torch.from_numpy(lens)
+		if self.cuda:
+			lens = lens.cuda()
 		return keys,values,lens
 
 def sample_gumbel(shape, eps=1e-10, out=None):
@@ -329,7 +332,7 @@ def output_mask(maxlen, lengths):
 	return mask
 
 
-def calculate_attention(keys, mask, queries):
+def calculate_attention(keys, mask, queries,cnn=False):
 	"""
 	Attention calculation
 	:param keys: (N, L, key_dim)
@@ -467,8 +470,8 @@ class Seq2SeqModel(nn.Module):
 		super(Seq2SeqModel, self).__init__()
 		self.encoder = EncoderModel(args)
 		if args.cnn:
+			#self.encoder = ConvEncoder(args)
 			self.encoder = DenseNet()
-			# self.encoder = ConvEncoder()
 		self.decoder = DecoderModel(args, vocab_size=vocab_size)
 		self._state_hooks = {}
 
@@ -725,6 +728,7 @@ def main(argv):
 	parser.add_argument('--num-workers', type=int, default=2, metavar='N', help='number of workers')
 	parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
 	parser.add_argument('--cnn',type=bool,default=False,metavar='N',help='CNN encoder')
+	parser.add_argument('--load',type=bool,default=False,metavar='N',help='load previous model')
 
 	parser.add_argument('--lr', type=float, default=1e-3, metavar='N', help='lr')
 	parser.add_argument('--weight-decay', type=float, default=1e-5, metavar='N', help='weight decay')
