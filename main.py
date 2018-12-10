@@ -669,7 +669,7 @@ def run(args):
     model = Seq2SeqModel(args, vocab_size=charcount)
     print("Running")
     trainer = Trainer()
-    if False:
+    if args.load:
         if os.path.exists(os.path.join(args.save_directory, trainer._checkpoint_filename)):
             trainer.load(from_directory=args.save_directory)
             model.load_state_dict(trainer.model.state_dict())
@@ -733,6 +733,8 @@ def main(argv):
     parser.add_argument('--num-workers', type=int, default=2, metavar='N', help='number of workers')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
     parser.add_argument('--run-inference', action='store_true', default=False, help='Just run inference')
+    parser.add_argument('--cnn',action='store_true',default=False,help='Use CNN')
+    parser.add_argument('--load',action='store_true',default=False,help='Load model')
 
     parser.add_argument('--lr', type=float, default=1e-3, metavar='N', help='lr')
     parser.add_argument('--weight-decay', type=float, default=1e-5, metavar='N', help='weight decay')
