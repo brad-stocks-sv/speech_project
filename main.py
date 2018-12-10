@@ -276,19 +276,19 @@ class EncoderModel(nn.Module):
 # 		# self.val_proj.bias.data.fill_(0)
 # 		torch.nn.init.xavier_uniform_(self.key_proj.weight.data)
 # 		# torch.nn.init.xavier_uniform(self.val_proj.weight.data)
-
-
-	def forward(self,input,lens):
-		var = input.permute(1,2,0)
-		var = self.convnet(var)
-		var = var.permute(0,2,1)
-		lens = full_run_lens(lens)
-		keys = self.key_proj(var).permute(1,0,2)
-		values = self.val_proj(var).permute(1,0,2)
-		lens = torch.from_numpy(lens)
-		if self.cuda:
-			lens = lens.cuda()
-		return keys,values,lens
+#
+#
+#	def forward(self,input,lens):
+#		var = input.permute(1,2,0)
+#		var = self.convnet(var)
+#		var = var.permute(0,2,1)
+#		lens = full_run_lens(lens)
+#		keys = self.key_proj(var).permute(1,0,2)
+#		values = self.val_proj(var).permute(1,0,2)
+#		lens = torch.from_numpy(lens)
+#		if self.cuda:
+#			lens = lens.cuda()
+#		return keys,values,lens
 
 def sample_gumbel(shape, eps=1e-10, out=None):
 	"""
@@ -474,9 +474,12 @@ class Seq2SeqModel(nn.Module):
 			self.encoder = DenseNet()
 		self.decoder = DecoderModel(args, vocab_size=vocab_size)
 		self._state_hooks = {}
+		self.args = args
 
 	def forward(self, utterances, utterance_lengths, chars, char_lengths, future=0):
 		keys, values, lengths = self.encoder(utterances, utterance_lengths)
+		if self.args.cuda:
+			lengths = lengths.cuda()
 		logits, attns, generated = self.decoder(chars, char_lengths, keys, values, lengths, future=future)
 		self._state_hooks['attention'] = attns.permute(1, 0, 2).unsqueeze(1).detach().cpu().numpy()
 		return logits, generated, char_lengths, self._state_hooks['attention']
@@ -622,7 +625,6 @@ class IterationTimer(Callback):
 
 def train(model, dataloader, criterion, optimizer, args):
 	global train_steps
-	print(dataloader.features[0].size())
 	train_strings = []
 	train_labels = []
 	train_attentions = []
@@ -643,7 +645,6 @@ def train(model, dataloader, criterion, optimizer, args):
 		train_losses.append(loss.item())
 		end = time.time()
 		batch_times.append(end - start)
-		print(attention.shape)
 
 
 
@@ -681,8 +682,8 @@ def run(args):
         optimizer = torch.optim.Adam(model.parameters(),lr=1e-3,weight_decay=1e-5)
         for epoch in range(args.epochs):
             train(model, train_data, SequenceCrossEntropy(), optimizer, args)
-    
-    if args.inference:
+
+    if args.run_inference:
         print("Running inference")
     else:
         trainer = Trainer(model) \

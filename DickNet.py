@@ -130,11 +130,10 @@ class DenseNet(nn.Module):
 		x = x.permute(1,2,0).unsqueeze(1)
 		features = self.features(x)
 		out = F.relu(features, inplace=True)
-		print(out.shape)
 		out = out.mean(dim=-1).permute(0,2,1)
 		lens = dense_full_run(lens)
 		# out = F.adaptive_avg_pool2d(out, (1, 1)).view(features.size(0), -1)
-		keys = self.key_proj(out)
-		values = self.val_proj(out)
+		keys = self.key_proj(out).permute(1,0,2)
+		values = self.val_proj(out).permute(1,0,2)
 		lens = torch.from_numpy(lens)
 		return keys,values,lens
