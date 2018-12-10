@@ -494,27 +494,29 @@ def decode_output(output, charset):
 
 
 def generate_transcripts(args, model, loader, charset):
-	# Create and yield transcripts
-	for uarray, ulens, l1array, llens, l2array in loader:
-		if args.cuda:
-			uarray = uarray.cuda()
-			ulens = ulens.cuda()
-			l1array = l1array.cuda()
-			llens = llens.cuda()
-		uarray = Variable(uarray)
-		ulens = Variable(ulens)
-		l1array = Variable(l1array)
-		llens = Variable(llens)
-
-		logits, generated, lens, attns = model(
-			uarray, ulens, l1array, llens,
-			future=args.generator_length)
-		attentions = attns
-		generated = generated.data.cpu().numpy()  # (L, BS)
-		n = uarray.size(1)
-		for i in range(n):
-			transcript = decode_output(generated[:, i], charset)
-			yield transcript
+    # Create and yield transcripts
+    for uarray, ulens, l1array, llens, l2array in loader:
+        if args.cuda:
+            uarray = uarray.cuda()
+            ulens = ulens.cuda()
+            l1array = l1array.cuda()
+            llens = llens.cuda()
+        uarray = Variable(uarray)
+        ulens = Variable(ulens)
+        l1array = Variable(l1array)
+        llens = Variable(llens)
+        start = time.time()
+        logits, generated, lens, attns = model(
+            uarray, ulens, l1array, llens,
+            future=args.generator_length)
+        end = time.time()
+        print("Inference took {}".format(end-start))
+        attentions = attns
+        generated = generated.data.cpu().numpy()  # (L, BS)
+        n = uarray.size(1)
+        for i in range(n):
+            transcript = decode_output(generated[:, i], charset)
+            yield transcript
 
 
 def write_transcripts(path, args, model, loader, charset):
@@ -648,102 +650,107 @@ def train(model, dataloader, criterion, optimizer, args):
 
 
 def run(args):
-	print("Pytorch version {}".format(torch.__version__))
-	print("Loading Data")
-	trainfeats, trainwords = load_data('train', args)
-	devfeats, devwords = load_data('dev', args)
-	testfeats, _ = load_data('test', args, True)
-	print("Building Charset")
-	charset = build_charset(np.concatenate((trainwords, devwords), axis=0))
-	charmap = make_charmap(charset)
-	charcount = len(charset)
-	print("Mapping Characters")
-	trainchars = map_characters(trainwords, charmap)
-	devchars = map_characters(devwords, charmap)
-	print("Building Loader")
-	dev_loader, dev_data = make_loader(devfeats, devchars, args, shuffle=True, batch_size=args.batch_size)
-	train_loader, train_data = make_loader(trainfeats, trainchars, args, shuffle=True, batch_size=args.batch_size)
-	test_loader, test_data = make_loader(testfeats, None, args, shuffle=False, batch_size=args.batch_size)
-	print("Building Model")
-	model = Seq2SeqModel(args, vocab_size=charcount)
-	print("Running")
-	trainer = Trainer()
-	if False:
-		if os.path.exists(os.path.join(args.save_directory, trainer._checkpoint_filename)):
-			trainer.load(from_directory=args.save_directory)
-			model.load_state_dict(trainer.model.state_dict())
-			print("model loaded")
-			if args.cuda:
-				model = model.cuda()
-	if False:
-		optimizer = torch.optim.Adam(model.parameters(),lr=1e-3,weight_decay=1e-5)
-		for epoch in range(args.epochs):
-			train(model, train_data, SequenceCrossEntropy(), optimizer, args)
-	else:
-		trainer = Trainer(model) \
-			.build_criterion(SequenceCrossEntropy) \
-			.build_optimizer('Adam', lr=args.lr, weight_decay=args.weight_decay) \
-			.validate_every((1, 'epochs')) \
-			.save_every((1, 'epochs')) \
-			.save_to_directory(args.save_directory) \
-			.set_max_num_epochs(args.epochs) \
-			.build_logger(TensorboardLogger(log_scalars_every=(1, 'iteration'),
-											log_images_every=(20, 'iteration')),
-											# log_histograms_every=(np.inf, 'iteration')),
-						  log_directory=args.save_directory)
-		trainer.logger.observe_state('attention')
+    print("Pytorch version {}".format(torch.__version__))
+    print("Loading Data")
+    trainfeats, trainwords = load_data('train', args)
+    devfeats, devwords = load_data('dev', args)
+    testfeats, _ = load_data('test', args, True)
+    print("Building Charset")
+    charset = build_charset(np.concatenate((trainwords, devwords), axis=0))
+    charmap = make_charmap(charset)
+    charcount = len(charset)
+    print("Mapping Characters")
+    trainchars = map_characters(trainwords, charmap)
+    devchars = map_characters(devwords, charmap)
+    print("Building Loader")
+    dev_loader, dev_data = make_loader(devfeats, devchars, args, shuffle=True, batch_size=args.batch_size)
+    train_loader, train_data = make_loader(trainfeats, trainchars, args, shuffle=True, batch_size=args.batch_size)
+    test_loader, test_data = make_loader(testfeats, None, args, shuffle=False, batch_size=args.batch_size)
+    print("Building Model")
+    model = Seq2SeqModel(args, vocab_size=charcount)
+    print("Running")
+    trainer = Trainer()
+    if args.load:
+        if os.path.exists(os.path.join(args.save_directory, trainer._checkpoint_filename)):
+            trainer.load(from_directory=args.save_directory)
+            model.load_state_dict(trainer.model.state_dict())
+            print("model loaded")
+            if args.cuda:
+                model = model.cuda()
+    if False:
+        optimizer = torch.optim.Adam(model.parameters(),lr=1e-3,weight_decay=1e-5)
+        for epoch in range(args.epochs):
+            train(model, train_data, SequenceCrossEntropy(), optimizer, args)
+    
+    if args.inference:
+        print("Running inference")
+    else:
+        trainer = Trainer(model) \
+            .build_criterion(SequenceCrossEntropy) \
+            .build_optimizer('Adam', lr=args.lr, weight_decay=args.weight_decay) \
+            .validate_every((1, 'epochs')) \
+            .save_every((1, 'epochs')) \
+            .save_to_directory(args.save_directory) \
+            .set_max_num_epochs(args.epochs) \
+            .build_logger(TensorboardLogger(log_scalars_every=(1, 'iteration'),
+                                            log_images_every=(20, 'iteration')),
+                                            # log_histograms_every=(np.inf, 'iteration')),
+                          log_directory=args.save_directory)
+        trainer.logger.observe_state('attention')
 
-		# Bind loaders
-		trainer.bind_loader('train', train_loader, num_inputs=4, num_targets=1)
-		trainer.bind_loader('validate', dev_loader, num_inputs=4, num_targets=1)
-		trainer.register_callback(SubmissionCallback(
-			args=args,
-			charset=charset,
-			loader=test_loader,
-		))
-		trainer.register_callback(EpochTimer)
-		trainer.register_callback(IterationTimer)
+        # Bind loaders
+        trainer.bind_loader('train', train_loader, num_inputs=4, num_targets=1)
+        trainer.bind_loader('validate', dev_loader, num_inputs=4, num_targets=1)
+        trainer.register_callback(SubmissionCallback(
+            args=args,
+            charset=charset,
+            loader=dev_loader,
+        ))
+        trainer.register_callback(EpochTimer)
+        trainer.register_callback(IterationTimer)
 
-		if args.cuda:
-			trainer.cuda()
+        if args.cuda:
+            trainer.cuda()
 
-		# write_transcripts(
-		# path=os.path.join(args.save_directory, 'submission.csv'),
-		# args=args, model=model, loader=test_loader, charset=charset)
-		# Go!
-		trainer.fit()
-		trainer.save()
-		model = trainer.model
-	write_transcripts(
-		path=os.path.join(args.save_directory, 'submission.csv'),
-		args=args, model=model, loader=test_loader, charset=charset)
+        # write_transcripts(
+        # path=os.path.join(args.save_directory, 'submission.csv'),
+        # args=args, model=model, loader=test_loader, charset=charset)
+        # Go!
+        trainer.fit()
+        trainer.save()
+        model = trainer.model
+    write_transcripts(
+        path=os.path.join(args.save_directory, 'submission.csv'),
+        args=args, model=model, loader=dev_loader, charset=charset)
 
 
 def main(argv):
-	# Training settings
-	parser = argparse.ArgumentParser(description='HW4 Baseline')
-	parser.add_argument('--batch-size', type=int, default=32, metavar='N', help='batch size')
-	parser.add_argument('--save-directory', type=str, default='output/hw4-LAS-baseline/v1', help='output directory')
-	parser.add_argument('--data-directory', type=str, default='./data', help='data directory')
-	parser.add_argument('--epochs', type=int, default=10, metavar='N', help='number of epochs')
-	parser.add_argument('--num-workers', type=int, default=2, metavar='N', help='number of workers')
-	parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
-	parser.add_argument('--cnn',type=bool,default=False,metavar='N',help='CNN encoder')
-	parser.add_argument('--load',type=bool,default=False,metavar='N',help='load previous model')
+    # Training settings
+    parser = argparse.ArgumentParser(description='HW4 Baseline')
+    parser.add_argument('--batch-size', type=int, default=32, metavar='N', help='batch size')
+    parser.add_argument('--save-directory', type=str, default='output/hw4-LAS-baseline/v1', help='output directory')
+    parser.add_argument('--data-directory', type=str, default='./data', help='data directory')
+    parser.add_argument('--epochs', type=int, default=10, metavar='N', help='number of epochs')
+    parser.add_argument('--num-workers', type=int, default=2, metavar='N', help='number of workers')
+    parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
+    parser.add_argument('--run-inference', action='store_true', default=False, help='Just run inference')
+    parser.add_argument('--cnn',action='store_true',default=False,help='Use CNN')
+    parser.add_argument('--load',action='store_true',default=False,help='Load model')
 
-	parser.add_argument('--lr', type=float, default=1e-3, metavar='N', help='lr')
-	parser.add_argument('--weight-decay', type=float, default=1e-5, metavar='N', help='weight decay')
-	parser.add_argument('--teacher-force-rate', type=float, default=0.7, metavar='N', help='teacher forcing rate')
+    parser.add_argument('--lr', type=float, default=1e-3, metavar='N', help='lr')
+    parser.add_argument('--weight-decay', type=float, default=1e-5, metavar='N', help='weight decay')
+    parser.add_argument('--teacher-force-rate', type=float, default=0.7, metavar='N', help='teacher forcing rate')
 
-	parser.add_argument('--encoder-dim', type=int, default=256, metavar='N', help='hidden dimension')
-	parser.add_argument('--decoder-dim', type=int, default=512, metavar='N', help='hidden dimension')
-	parser.add_argument('--value-dim', type=int, default=128, metavar='N', help='hidden dimension')
-	parser.add_argument('--key-dim', type=int, default=128, metavar='N', help='hidden dimension')
-	parser.add_argument('--generator-length', type=int, default=250, metavar='N', help='maximum length to generate')
+    parser.add_argument('--encoder-dim', type=int, default=256, metavar='N', help='hidden dimension')
+    parser.add_argument('--decoder-dim', type=int, default=512, metavar='N', help='hidden dimension')
+    parser.add_argument('--value-dim', type=int, default=128, metavar='N', help='hidden dimension')
+    parser.add_argument('--key-dim', type=int, default=128, metavar='N', help='hidden dimension')
+    parser.add_argument('--generator-length', type=int, default=250, metavar='N', help='maximum length to generate')
 
-	args = parser.parse_args(argv)
-	args.cuda = not args.no_cuda and torch.cuda.is_available()
-	run(args)
+    args = parser.parse_args(argv)
+    args.cuda = not args.no_cuda and torch.cuda.is_available()
+    run(args)
+
 
 
 if __name__ == '__main__':
