@@ -136,5 +136,5 @@ class DenseNet(nn.Module):
 		# out = F.adaptive_avg_pool2d(out, (1, 1)).view(features.size(0), -1)
 		keys = self.key_proj(out)
 		values = self.val_proj(out)
-		lens = 
+		lens = torch.from_numpy(lens)
 		return keys,values,lens
