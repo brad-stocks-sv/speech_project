@@ -471,7 +471,6 @@ class Seq2SeqModel(nn.Module):
 		super(Seq2SeqModel, self).__init__()
 		self.encoder = EncoderModel(args)
 		if args.cnn:
-			#self.encoder = ConvEncoder(args)
 			self.encoder = DenseNet()
 		self.decoder = DecoderModel(args, vocab_size=vocab_size)
 		self._state_hooks = {}
@@ -673,6 +672,7 @@ def run(args):
     if args.load:
         if os.path.exists(os.path.join(args.save_directory, trainer._checkpoint_filename)):
             trainer.load(from_directory=args.save_directory)
+            print(trainer.model.state_dict())
             model.load_state_dict(trainer.model.state_dict())
             print("model loaded")
             if args.cuda:
