@@ -17,6 +17,7 @@ from torch.nn.utils.rnn import PackedSequence
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.dataloader import _use_shared_memory
+from DickNet import *
 
 INPUT_DIM = 40
 batch_times = []
