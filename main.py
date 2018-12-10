@@ -493,7 +493,6 @@ def decode_output(output, charset):
 
 
 def generate_transcripts(args, model, loader, charset):
-<<<<<<< HEAD
     # Create and yield transcripts
     for uarray, ulens, l1array, llens, l2array in loader:
         if args.cuda:
@@ -517,29 +516,6 @@ def generate_transcripts(args, model, loader, charset):
         for i in range(n):
             transcript = decode_output(generated[:, i], charset)
             yield transcript
-=======
-	# Create and yield transcripts
-	for uarray, ulens, l1array, llens, l2array in loader:
-		if args.cuda:
-			uarray = uarray.cuda()
-			ulens = ulens.cuda()
-			l1array = l1array.cuda()
-			llens = llens.cuda()
-		uarray = Variable(uarray)
-		ulens = Variable(ulens)
-		l1array = Variable(l1array)
-		llens = Variable(llens)
-
-		logits, generated, lens, attns = model(
-			uarray, ulens, l1array, llens,
-			future=args.generator_length)
-		attentions = attns
-		generated = generated.data.cpu().numpy()  # (L, BS)
-		n = uarray.size(1)
-		for i in range(n):
-			transcript = decode_output(generated[:, i], charset)
-			yield transcript
->>>>>>> 593e4b8d93b720c17760efa7dee62dd51d7bb077
 
 
 def write_transcripts(path, args, model, loader, charset):
