@@ -425,10 +425,12 @@ def generate_transcripts(args, model, loader, charset):
         ulens = Variable(ulens)
         l1array = Variable(l1array)
         llens = Variable(llens)
-
+        start = time.time()
         logits, generated, lens, attns = model(
             uarray, ulens, l1array, llens,
             future=args.generator_length)
+        end = time.time()
+        print("Inference took {}".format(end-start))
         attentions = attns
         generated = generated.data.cpu().numpy()  # (L, BS)
         n = uarray.size(1)
@@ -599,6 +601,9 @@ def run(args):
         optimizer = torch.optim.Adam(model.parameters(),lr=1e-3,weight_decay=1e-5)
         for epoch in range(args.epochs):
             train(model, train_data, SequenceCrossEntropy(), optimizer, args)
+    
+    if args.inference:
+        print("Running inference")
     else:
         trainer = Trainer(model) \
             .build_criterion(SequenceCrossEntropy) \
@@ -619,7 +624,7 @@ def run(args):
         trainer.register_callback(SubmissionCallback(
             args=args,
             charset=charset,
-            loader=test_loader,
+            loader=dev_loader,
         ))
         trainer.register_callback(EpochTimer)
         trainer.register_callback(IterationTimer)
@@ -636,7 +641,7 @@ def run(args):
         model = trainer.model
     write_transcripts(
         path=os.path.join(args.save_directory, 'submission.csv'),
-        args=args, model=model, loader=test_loader, charset=charset)
+        args=args, model=model, loader=dev_loader, charset=charset)
 
 
 def main(argv):
@@ -648,6 +653,7 @@ def main(argv):
     parser.add_argument('--epochs', type=int, default=10, metavar='N', help='number of epochs')
     parser.add_argument('--num-workers', type=int, default=2, metavar='N', help='number of workers')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
+    parser.add_argument('--run-inference', action='store_true', default=False, help='Just run inference')
 
     parser.add_argument('--lr', type=float, default=1e-3, metavar='N', help='lr')
     parser.add_argument('--weight-decay', type=float, default=1e-5, metavar='N', help='weight decay')
