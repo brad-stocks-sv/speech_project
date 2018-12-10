@@ -1,3 +1,5 @@
+*.pem
+output
 *.pt
 *.npy
 data
