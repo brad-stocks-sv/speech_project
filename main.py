@@ -1,3 +1,4 @@
+import warnings
 import argparse
 import csv
 import itertools
@@ -18,6 +19,8 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.dataloader import _use_shared_memory
 from DickNet import *
+
+warnings.filterwarnings("ignore")
 
 INPUT_DIM = 40
 batch_times = []
@@ -513,10 +516,9 @@ def generate_transcripts(args, model, loader, charset):
             future=args.generator_length)
         end = time.time()
         print("Inference took {}".format(end-start))
-        attentions = attns
         generated = generated.data.cpu().numpy()  # (L, BS)
         n = uarray.size(1)
-        np.save("attentions.npy",attns)
+        np.save("attentions.npy",attns.cpu().numpy())
         for i in range(n):
             transcript = decode_output(generated[:, i], charset)
             yield transcript
