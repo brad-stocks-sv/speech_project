@@ -518,7 +518,7 @@ def generate_transcripts(args, model, loader, charset):
         print("Inference took {}".format(end-start))
         generated = generated.data.cpu().numpy()  # (L, BS)
         n = uarray.size(1)
-        np.save("attentions.npy",attns.cpu().numpy())
+        np.save("attentions.npy",attns)
         for i in range(n):
             transcript = decode_output(generated[:, i], charset)
             yield transcript
@@ -533,7 +533,7 @@ def write_transcripts(path, args, model, loader, charset):
 		transcripts = generate_transcripts(args, model, loader, charset)
 		w.writerow(['Id', 'Predicted'])
 		for i, t in enumerate(transcripts):
-			print(i, t)
+			#print(i, t)
 			w.writerow([i, t])
 
 
@@ -707,7 +707,7 @@ def run(args):
         trainer.register_callback(SubmissionCallback(
             args=args,
             charset=charset,
-            loader=dev_loader,
+            loader=test_loader,
         ))
         trainer.register_callback(EpochTimer)
         trainer.register_callback(IterationTimer)
