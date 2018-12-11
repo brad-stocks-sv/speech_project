@@ -516,6 +516,7 @@ def generate_transcripts(args, model, loader, charset):
         attentions = attns
         generated = generated.data.cpu().numpy()  # (L, BS)
         n = uarray.size(1)
+        np.save("attentions.npy",attns)
         for i in range(n):
             transcript = decode_output(generated[:, i], charset)
             yield transcript
@@ -570,7 +571,6 @@ class SubmissionCallback(Callback):
 		with open(os.path.join(self.args.save_directory, 'model-{:012d}.pt'.format(step)), 'wb') as f:
 			torch.save(self.trainer.model.state_dict(), f)
 			print("Saved mutha fucka")
-		np.save('attentions.npy', np.array(attentions))
 		write_transcripts(
 			path=os.path.join(self.args.save_directory, 'submission-{:012d}.csv'.format(step)),
 			model=self.trainer.model,
