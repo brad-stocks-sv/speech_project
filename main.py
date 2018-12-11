@@ -500,7 +500,11 @@ def decode_output(output, charset):
 
 def generate_transcripts(args, model, loader, charset):
     # Create and yield transcripts
+    counter = 0
     for uarray, ulens, l1array, llens, l2array in loader:
+    	counter += 1
+    	if counter > 5:
+    		break
         if args.cuda:
             uarray = uarray.cuda()
             ulens = ulens.cuda()
