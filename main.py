@@ -667,7 +667,7 @@ def run(args):
     print("Building Loader")
     dev_loader, dev_data = make_loader(devfeats, devchars, args, shuffle=True, batch_size=args.batch_size)
     train_loader, train_data = make_loader(trainfeats, trainchars, args, shuffle=True, batch_size=args.batch_size)
-    test_loader, test_data = make_loader(testfeats, None, args, shuffle=False, batch_size=args.batch_size)
+    test_loader, test_data = make_loader(devfeats, None, args, shuffle=False, batch_size=args.batch_size)
     print("Building Model")
     model = Seq2SeqModel(args, vocab_size=charcount)
     print("Running")
@@ -704,11 +704,11 @@ def run(args):
         # Bind loaders
         trainer.bind_loader('train', train_loader, num_inputs=4, num_targets=1)
         trainer.bind_loader('validate', dev_loader, num_inputs=4, num_targets=1)
-        trainer.register_callback(SubmissionCallback(
-            args=args,
-            charset=charset,
-            loader=test_loader,
-        ))
+        #trainer.register_callback(SubmissionCallback(
+        #    args=args,
+        #    charset=charset,
+        #    loader=test_loader,
+        #))
         trainer.register_callback(EpochTimer)
         trainer.register_callback(IterationTimer)
 
@@ -724,7 +724,7 @@ def run(args):
         model = trainer.model
     write_transcripts(
         path=os.path.join(args.save_directory, 'submission.csv'),
-        args=args, model=model, loader=dev_loader, charset=charset)
+        args=args, model=model, loader=test_loader, charset=charset)
 
 
 def main(argv):
