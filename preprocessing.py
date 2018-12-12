@@ -1,44 +1,48 @@
 import numpy as np
 import os
 
-train_transcripts = np.load(os.getcwd() + "/data/train_transcripts.npy")
-dev_transcripts = np.load(os.getcwd() + "/data/dev_transcripts.npy")
+train_transcripts = np.load(os.getcwd() + "/data/train_transcripts.npy", encoding='bytes')
+dev_transcripts = np.load(os.getcwd() + "/data/dev_transcripts.npy", encoding='bytes')
 
-def intefy(transcripts,label_map,prepend):
-	nlist = []
-	for tt in transcripts:
-		tlist = [len(label_map) - 2]
-		for c in tt:
-			tlist.append(label_map[c])
-		tlist.append(len(label_map)-1)
-		nlist.append(np.array(tlist))
-	nlist = np.array(nlist)
-	np.save(os.getcwd() + "/data/" + prepend + "_labels.npy",nlist)
 
-characters = {}
-total_chars = 0
-for tt in train_transcripts:
-	for c in tt:
-		total_chars += 1
-		if c not in characters:
-			characters[c] = 1
-		else:
-			characters[c] += 1
-#print("(" in characters)
-#print(")" in characters)
-lb34 = []
-for c in sorted(characters.keys()):
-	lb34.append(characters[c]/total_chars)
-lb34.append(1)
-lb34.append(1)
-lb34 = np.log(np.array(lb34,dtype="float32"))
-#print(type(lb34))
-np.save("data/lb34.npy",lb34)
+label_map = {0: ' ', 1: "'", 2: '+', 3: '-', 4: '.', 5: 'A', 6: 'B', 7: 'C', 8: 'D', 9: 'E', 10: 'F', 11: 'G', 12: 'H', 13: 'I', 14: 'J', 15: 'K', 16: 'L', 17: 'M', 18: 'N', 19: 'O', 20: 'P', 21: 'Q', 22: 'R', 23: 'S', 24: 'T', 25: 'U', 26: 'V', 27: 'W', 28: 'X', 29: 'Y', 30: 'Z', 31: '_', 32: '(', 33: ')'}
+char_map = {' ': 0, "'": 1, '+': 2, '-': 3, '.': 4, 'A': 5, 'B': 6, 'C': 7, 'D': 8, 'E': 9, 'F': 10, 'G': 11, 'H': 12, 'I': 13, 'J': 14, 'K': 15, 'L': 16, 'M': 17, 'N': 18, 'O': 19, 'P': 20, 'Q': 21, 'R': 22, 'S': 23, 'T': 24, 'U': 25, 'V': 26, 'W': 27, 'X': 28, 'Y': 29, 'Z': 30, '_': 31, '(': 32, ')': 33}
+# train_labels = []
+# dev_labels = []
 
-label_map = {s:i for i,s in enumerate(sorted(characters.keys()))}
-label_map["("] = len(label_map)
-label_map[")"] = len(label_map)
-np.save(os.getcwd() + "/data/label_map.npy",label_map)
-intefy(train_transcripts,label_map,"train")
-intefy(dev_transcripts,label_map,"dev")
+# for tt in train_transcripts:
+# 	temp = " ".join([str(j)[2:-1] for j in tt])
+# 	train_labels.append(temp)
+
+# for tt in dev_transcripts:
+# 	temp = " ".join([str(j)[2:-1] for j in tt])
+# 	dev_labels.append(temp)
+
+# np.save('./data/train_labels.npy', np.array(train_labels))
+# np.save('./data/dev_labels.npy', np.array(dev_labels))
+def transcripts_unbyte(transcripts,prepend):
+	sentences = []
+	for t in transcripts:
+		sentence = ""
+		for word in t:
+				sentence+= word.decode("utf-8") + " "
+		sentence = "(" + sentence[:-1] + ")"
+		sentences.append(sentence)
+	np.save("./data/nb_" + prepend + "_transcripts.npy",np.array(sentences))
+	return sentences
+
+def transcripts_intefy(transcripts,prepend):
+	labels = []
+	for t in transcripts:
+		l = []
+		for ch in t:
+			l.append(char_map[ch])
+		labels.append(np.array(l))
+	np.save("./data/" + prepend + "_labels.npy",np.array(labels))
+
+ttnb = transcripts_unbyte(train_transcripts,"train")
+dtnb =transcripts_unbyte(dev_transcripts,"dev")
+transcripts_intefy(ttnb,"train")
+transcripts_intefy(dtnb,"dev")
+
 
