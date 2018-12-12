@@ -232,67 +232,6 @@ class EncoderModel(nn.Module):
 		return keys, values, output_lengths
 
 
-# class ConvEncoder(nn.Module):
-# 	def __init__(self,args,ninp=40,nout=128):
-# 		super(ConvEncoder, self).__init__()
-# 		self.convnet = []
-# 		self.convnet.append(nn.Conv1d(in_channels=ninp,out_channels=64,kernel_size=3,stride=1,padding=1))
-# 		self.convnet.append(nn.BatchNorm1d(64))
-# 		self.convnet.append(nn.LeakyReLU())
-# 		self.convnet.append(nn.Conv1d(in_channels=64,out_channels=64,kernel_size=3,stride=1,padding=1))
-# 		self.convnet.append(nn.BatchNorm1d(64))
-# 		self.convnet.append(nn.LeakyReLU())
-# 		self.convnet.append(nn.Conv1d(in_channels=64,out_channels=64,kernel_size=3,stride=2,padding=1))
-# 		self.convnet.append(nn.BatchNorm1d(64))
-# 		self.convnet.append(nn.LeakyReLU())
-# 		self.convnet.append(nn.Conv1d(in_channels=64,out_channels=128,kernel_size=3,stride=1,padding=1))
-# 		self.convnet.append(nn.BatchNorm1d(128))
-# 		self.convnet.append(nn.LeakyReLU())
-# 		self.convnet.append(nn.Conv1d(in_channels=128,out_channels=128,kernel_size=3,stride=1,padding=1))
-# 		self.convnet.append(nn.BatchNorm1d(128))
-# 		self.convnet.append(nn.LeakyReLU())
-# 		self.convnet.append(nn.Conv1d(in_channels=128,out_channels=128,kernel_size=3,stride=2,padding=1))
-# 		self.convnet.append(nn.BatchNorm1d(128))
-# 		self.convnet.append(nn.LeakyReLU())
-# 		self.convnet.append(nn.Conv1d(in_channels=128,out_channels=256,kernel_size=3,stride=1,padding=1))
-# 		self.convnet.append(nn.BatchNorm1d(256))
-# 		self.convnet.append(nn.LeakyReLU())
-# 		self.convnet.append(nn.Conv1d(in_channels=256,out_channels=256,kernel_size=3,stride=1,padding=1))
-# 		self.convnet.append(nn.BatchNorm1d(256))
-# 		self.convnet.append(nn.LeakyReLU())
-# 		self.convnet.append(nn.Conv1d(in_channels=256,out_channels=256,kernel_size=3,stride=2,padding=1))
-# 		self.convnet.append(nn.BatchNorm1d(256))
-# 		self.convnet.append(nn.LeakyReLU())
-# 		self.convnet = nn.Sequential(*self.convnet)
-
-# 		self.key_proj = nn.Linear(256,nout)
-# 		self.val_proj = nn.Linear(256,nout)
-
-# 		self.ninp = ninp
-# 		self.nout = nout
-# 		self.cuda = args.cuda
-# 		self.init_weights()
-
-# 	def init_weights(self):
-# 		init_range = 0.1
-# 		self.key_proj.bias.data.fill_(0)
-# 		# self.val_proj.bias.data.fill_(0)
-# 		torch.nn.init.xavier_uniform_(self.key_proj.weight.data)
-# 		# torch.nn.init.xavier_uniform(self.val_proj.weight.data)
-#
-#
-#	def forward(self,input,lens):
-#		var = input.permute(1,2,0)
-#		var = self.convnet(var)
-#		var = var.permute(0,2,1)
-#		lens = full_run_lens(lens)
-#		keys = self.key_proj(var).permute(1,0,2)
-#		values = self.val_proj(var).permute(1,0,2)
-#		lens = torch.from_numpy(lens)
-#		if self.cuda:
-#			lens = lens.cuda()
-#		return keys,values,lens
-
 def sample_gumbel(shape, eps=1e-10, out=None):
 	"""
 	Sample from Gumbel(0, 1)
